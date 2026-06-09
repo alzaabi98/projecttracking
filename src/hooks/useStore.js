@@ -10,22 +10,8 @@ const defaultState = {
   darkMode: false,
 }
 
-// LocalStorage fallback key
-const LS_KEY = 'cafe-tracker-data'
-
-function loadLocal() {
-  try {
-    const raw = localStorage.getItem(LS_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch { return null }
-}
-
-function saveLocal(data) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(data)) } catch {}
-}
-
 export function useStore(userId) {
-  const [state, setState] = useState(() => loadLocal() || { ...defaultState })
+  const [state, setState] = useState({ ...defaultState })
   const [syncing, setSyncing] = useState(false)
 
   // Load from Supabase on mount / user change
@@ -40,30 +26,28 @@ export function useStore(userId) {
       .then(({ data, error }) => {
         if (data?.data) {
           setState(data.data)
-          saveLocal(data.data)
         } else if (error?.code === 'PGRST116') {
-          // No row yet — push current local state up
-          const local = loadLocal() || { ...defaultState }
+          // No row yet — create one with defaults
           supabase.from('user_projects').upsert(
-            { user_id: userId, data: local, updated_at: new Date().toISOString() },
+            { user_id: userId, data: defaultState, updated_at: new Date().toISOString() },
             { onConflict: 'user_id' }
           )
-          setState(local)
+          setState({ ...defaultState })
         }
         setSyncing(false)
       })
   }, [userId])
 
-  // Save to Supabase + LocalStorage whenever state changes
   const persist = useCallback(async (newState) => {
-    saveLocal(newState)
     if (!userId) return
+    setSyncing(true)
     await supabase
       .from('user_projects')
       .upsert(
         { user_id: userId, data: newState, updated_at: new Date().toISOString() },
         { onConflict: 'user_id' }
       )
+    setSyncing(false)
   }, [userId])
 
   const update = (patch) => {
