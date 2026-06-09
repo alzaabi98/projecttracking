@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
-import { LayoutDashboard, FolderOpen, CheckSquare, Settings as SettingsIcon, Moon, Sun, Coffee } from 'lucide-react'
+import { LayoutDashboard, FolderOpen, CheckSquare, Settings as SettingsIcon, Moon, Sun, Coffee, LogOut, Loader2 } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import Scopes from './components/Scopes'
 import Checklist from './components/Checklist'
 import Settings from './components/Settings'
+import AuthPage from './components/AuthPage'
 import { useStore } from './hooks/useStore'
+import { supabase } from './lib/supabase'
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -14,13 +16,34 @@ const NAV = [
 ]
 
 export default function App() {
-  const store = useStore()
-  const { state, toggleDark } = store
+  const [session, setSession] = useState(undefined) // undefined = loading
   const [tab, setTab] = useState('dashboard')
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => setSession(s))
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const store = useStore(session?.user?.id)
+  const { state, toggleDark, syncing } = store
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', !!state.darkMode)
   }, [state.darkMode])
+
+  // Loading auth state
+  if (session === undefined) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <Loader2 size={28} className="animate-spin text-indigo-500" />
+      </div>
+    )
+  }
+
+  if (!session) return <AuthPage />
+
+  const handleSignOut = () => supabase.auth.signOut()
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
@@ -32,12 +55,20 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-sm font-bold text-gray-900 dark:text-white leading-none">{state.projectName}</h1>
-              <p className="text-[10px] text-gray-400 leading-none mt-0.5">Cafe Cost Tracker</p>
+              <p className="text-[10px] text-gray-400 leading-none mt-0.5 flex items-center gap-1">
+                Cafe Cost Tracker
+                {syncing && <Loader2 size={9} className="animate-spin inline-block" />}
+              </p>
             </div>
           </div>
-          <button onClick={toggleDark} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-            {state.darkMode ? <Sun size={17} /> : <Moon size={17} />}
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={toggleDark} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+              {state.darkMode ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+            <button onClick={handleSignOut} className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Sign out">
+              <LogOut size={17} />
+            </button>
+          </div>
         </div>
       </header>
 
