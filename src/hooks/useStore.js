@@ -44,7 +44,10 @@ export function useStore(userId) {
         } else if (error?.code === 'PGRST116') {
           // No row yet — push current local state up
           const local = loadLocal() || { ...defaultState }
-          supabase.from('user_projects').insert({ user_id: userId, data: local })
+          supabase.from('user_projects').upsert(
+            { user_id: userId, data: local, updated_at: new Date().toISOString() },
+            { onConflict: 'user_id' }
+          )
           setState(local)
         }
         setSyncing(false)
@@ -57,7 +60,10 @@ export function useStore(userId) {
     if (!userId) return
     await supabase
       .from('user_projects')
-      .upsert({ user_id: userId, data: newState, updated_at: new Date().toISOString() })
+      .upsert(
+        { user_id: userId, data: newState, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' }
+      )
   }, [userId])
 
   const update = (patch) => {
